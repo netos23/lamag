@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      OPAMYES: "true"
+      OPAMSOLVERTIMEOUT: "400"
+      OCAML_VERSION: "4.14.2"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup GraalVM (Java 17, native-image)
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '17'
+          distribution: 'graalvm-community'
+          components: 'native-image'
+          cache: 'maven'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install OS dependencies for Lama
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential opam m4 pkg-config gcc-14-multilib
+
+      - name: Install Lama via opam
+        run: |
+          opam init -y --disable-sandboxing
+          opam switch create lama --packages=ocaml-variants.${OCAML_VERSION}+options,ocaml-option-flambda --yes
+          eval "$(opam env --switch=lama --set-switch)"
+          opam pin add Lama https://github.com/PLTools/Lama.git#1.30 --no-action --yes
+          opam install Lama --yes
+          opam env --switch=lama --set-switch --shell=sh >> "$GITHUB_ENV"
+          if ! LAMAC_BIN="$(which lamac)"; then
+            echo "::error::lamac executable not found via which" >&2
+            exit 1
+          fi
+          if [ ! -x "$LAMAC_BIN" ]; then
+            echo "::error::LAMAC_BIN=$LAMAC_BIN is not executable" >&2
+            exit 1
+          fi
+          echo "LAMAC_BIN=${LAMAC_BIN}" >> "$GITHUB_ENV"
+
+      - name: Run JVM unit tests
+        run: mvn -B test
+
+      - name: Build native-image binary
+        run: ./scripts/build_native.sh
+
+      - name: Prepare regression fixtures
+        run: ./scripts/make_examples.sh
+
+      - name: Prepare performance fixtures
+        run: ./scripts/make_perf.sh
+
+      - name: Run IO regression tests
+        env:
+          LAMAG_BIN: ${{ github.workspace }}/target/lamag
+        run: ./test/run_io.sh
+
+      - name: Run performance tests
+        env:
+          LAMAG_BIN: ${{ github.workspace }}/target/lamag
+        run: ./test/run_performance.sh
+
+      - name: Upload native binary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lamag-linux-x64
+          path: target/lamag
+          if-no-files-found: warn

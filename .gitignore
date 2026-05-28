@@ -4,6 +4,10 @@ target/
 !**/src/test/**/target/
 .kotlin
 
+# Test fixtures copied from third_party/Lama by scripts/make_*.sh
+/regression/
+/performance/
+
 ### IntelliJ IDEA ###
 .idea/refs/
 .idea/jarRepositories.xml
