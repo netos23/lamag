@@ -15,12 +15,18 @@
 ## Зависимости
 
 - **Обычный JDK 17+** (Liberica, Temurin, OpenJDK) для `mvn test` и для разработки в IDE.
-- **GraalVM CE 22.3.x + native-image** для сборки нативного бинаря и интеграционных тестов.
+- **GraalVM CE 25.x с `native-image`** (например `brew install --cask graalvm-jdk`) для сборки нативного бинаря и интеграционных тестов. Параметр `graalvm.version` в `pom.xml` синхронизирован с 25.0.3, исходники собираются как JPMS-модуль `pro.fbtw.lamag` (`src/main/java/module-info.java`), и native-image берёт зависимости с module-path.
 - Maven 3.8+
 - Git (для подмодуля рантайма)
 - *Опционально:* `lamac` (Lama 1.30) — нужен для сравнительных performance-тестов
 
-> **Важно:** при запуске `mvn test` под GraalVM JDK 17 встроенный модуль `org.graalvm.truffle` маскирует наш classpath-зависимый `truffle-api`, и ServiceLoader не находит `LamaLanguageProvider` (ошибка `Installed languages are: []`). Поэтому для unit-тестов используется обычный JDK, а GraalVM подключается только для нативной сборки.
+> **Важно:** при запуске `mvn test` под GraalVM JDK встроенный модуль `org.graalvm.truffle` маскирует наш classpath-зависимый `truffle-api`, и ServiceLoader может не найти `LamaLanguageProvider` (ошибка `Installed languages are: []`). Поэтому для unit-тестов используется обычный JDK, а GraalVM подключается только для нативной сборки.
+
+Если `native-image` не найден при запуске `./scripts/build_native.sh`, передайте путь к GraalVM через `JAVA_HOME` — скрипт автоматически подцепит `$JAVA_HOME/bin`:
+
+```bash
+JAVA_HOME=/opt/homebrew/opt/graalvm ./scripts/build_native.sh
+```
 
 Инициализация сабмодуля (обязательно перед сборкой тестовых фикстур):
 
@@ -104,6 +110,27 @@ mvn -B test
 - `LAMAC_BIN` — путь или имя `lamac` (по умолчанию ищется в PATH).
 - `SKIP_LAMAC` — `true`, чтобы пропустить запуски `lamac`.
 
+### 4. JVM-режим (без native-image)
+
+Альтернатива native-бинарю — гонять те же сьюты через shaded jar и обычный JVM. Полезно, когда `native-image` не установлен или нужно сравнить поведение JIT/AOT.
+
+```bash
+./scripts/build_jvm.sh         # mvn package -> target/lamag-*-all.jar
+./scripts/make_examples.sh
+./test/run_io_jvm.sh
+
+./scripts/make_perf.sh
+./test/run_performance_jvm.sh
+```
+
+`run_io_jvm.sh` и `run_performance_jvm.sh` — тонкие обёртки, которые подменяют `LAMAG_BIN` на `scripts/lamag_jvm.sh` (запускает `java -jar target/lamag-*-all.jar`) и делегируют в обычные `run_io.sh` / `run_performance.sh`. Все их переменные окружения (`FIXTURE_DIR`, `LAMAC_BIN`, `SKIP_LAMAC` и т.д.) работают как обычно. Дополнительно:
+
+- `LAMAG_JAR` — путь к shaded jar (по умолчанию свежий `target/lamag-*-all.jar`).
+- `JAVA` — путь к `java` (по умолчанию `$JAVA_HOME/bin/java` или из PATH).
+- `JAVA_OPTS` — дополнительные опции JVM.
+
+Под GraalVM JDK обёртка передаёт `-Dtruffle.class.path.append=<jar>`, чтобы встроенный модуль `org.graalvm.truffle` подхватил наш `LamaLanguageProvider`; под обычным JDK это безвредный no-op.
+
 ### Очистка фикстур
 
 ```bash
@@ -115,7 +142,7 @@ mvn -B test
 Workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) разбит на две независимые джобы:
 
 1. **`unit-tests`** — поднимает обычный Liberica JDK 17 (без встроенного Truffle) и гоняет `mvn -B test`. Под обычным JDK наш `truffle-api` с classpath регистрируется без проблем.
-2. **`integration-tests`** — зависит от первой джобы, поднимает GraalVM Community 17 + `native-image`, ставит Lama 1.30 через opam, и прогоняет:
+2. **`integration-tests`** — зависит от первой джобы, поднимает GraalVM Community 25 (с встроенным `native-image`), ставит Lama 1.30 через opam, и прогоняет:
    - `./scripts/build_native.sh` — сборка native-image бинаря (тесты пропускаются: `SKIP_TESTS=true`);
    - `./scripts/make_examples.sh` / `./scripts/make_perf.sh` — подготовка фикстур;
    - `./test/run_io.sh` — IO-регрессии на native-бинаре;

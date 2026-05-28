@@ -15,7 +15,11 @@ public final class Main {
             System.exit(2);
         }
         Source source = Source.newBuilder(LamaLanguage.ID, new File(args[0])).build();
-        try (Context context = Context.newBuilder(LamaLanguage.ID).in(System.in).out(System.out).build()) {
+        try (Context context = Context.newBuilder(LamaLanguage.ID)
+                .in(System.in)
+                .out(System.out)
+                .option("engine.WarnInterpreterOnly", "false")
+                .build()) {
             context.eval(source);
         }
     }

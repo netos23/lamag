@@ -16,19 +16,31 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+# When JAVA_HOME points to a GraalVM, make sure its bin/ is on PATH so that
+# native-image and the GraalVM java are found by `command -v` and by mvn.
+if [[ -n "${JAVA_HOME:-}" ]] && [[ -d "${JAVA_HOME}/bin" ]]; then
+  PATH="${JAVA_HOME}/bin:${PATH}"
+fi
+
 MVN_BIN="${MVN:-mvn}"
 SKIP_TESTS="${SKIP_TESTS:-true}"
 
 if ! command -v "${MVN_BIN}" >/dev/null 2>&1; then
-  echo "::error::mvn executable not found in PATH" >&2
+  echo "::error::mvn executable not found in PATH (PATH=${PATH})" >&2
   exit 1
 fi
 
 if ! command -v native-image >/dev/null 2>&1; then
   echo "::error::native-image executable not found in PATH" >&2
-  echo "Install GraalVM and run: gu install native-image" >&2
+  echo "Install GraalVM with native-image and ensure \$JAVA_HOME/bin is on PATH." >&2
+  echo "Tip: re-run as 'JAVA_HOME=/path/to/graalvm ./scripts/build_native.sh' (this script auto-prepends \$JAVA_HOME/bin)." >&2
   exit 1
 fi
+
+echo "==> JAVA_HOME=${JAVA_HOME:-unset}" >&2
+echo "==> java: $(command -v java)" >&2
+echo "==> native-image: $(command -v native-image)" >&2
+echo "==> mvn: $(command -v "${MVN_BIN}")" >&2
 
 echo "==> Building native image via maven 'native' profile" >&2
 "${MVN_BIN}" -Pnative -DskipTests="${SKIP_TESTS}" package

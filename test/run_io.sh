@@ -49,12 +49,25 @@ normalize_expected() {
 
 normalize_actual() {
   local src="$1" dst="$2"
+  # Drop Truffle/polyglot diagnostics that occasionally leak into the captured
+  # stream before normalizing whitespace.
   sed -E \
+    -e '/^\[(To redirect|engine|\*).*$/d' \
+    -e '/^\* .*polyglot.*$/d' \
+    -e '/^Execution without runtime compilation/d' \
+    -e '/^The following cause was found/d' \
+    -e '/^For more information see/d' \
+    -e '/^To disable this warning/d' \
     -e 's/>[[:space:]]+/>/g' \
     -e 's/[[:space:]]+/ /g' \
     -e 's/^[[:space:]]+//' \
     -e 's/[[:space:]]+$//' \
     "$src" | sed '/^[[:space:]]*$/d' >"$dst"
+}
+
+filter_noise() {
+  local src="$1"
+  grep -Ev '^\[(To redirect|engine|\*)|^\* .*polyglot|^Execution without runtime compilation|^The following cause was found|^For more information see|^To disable this warning' "$src" 2>/dev/null || true
 }
 
 TOTAL=0
@@ -111,9 +124,9 @@ for LAMA_FILE in "${LAMA_FILES[@]}"; do
 
   if (( STATUS != 0 )); then
     ((++FAIL))
-    ERR_MSG=$(tr -d '\r' <"${LM_ERR}" | head -c 400)
+    ERR_MSG=$(filter_noise "${LM_ERR}" | tr -d '\r' | head -c 400)
     echo "::error file=${LAMA_FILE}::lamag failed (exit ${STATUS}) ${ERR_MSG}" >&2
-    FAILURES+=("${LAMA_FILE}: lamag failed")
+    FAILURES+=("${LAMA_FILE}: lamag failed (exit ${STATUS})")
     continue
   fi
 

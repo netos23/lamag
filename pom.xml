@@ -10,12 +10,12 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
-        <graalvm.version>22.3.0</graalvm.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <graalvm.version>25.0.3</graalvm.version>
         <antlr.version>4.13.2</antlr.version>
         <junit.version>4.13.2</junit.version>
-        <native.maven.plugin.version>0.9.28</native.maven.plugin.version>
+        <native.maven.plugin.version>0.10.6</native.maven.plugin.version>
         <main.class>pro.fbtw.lamag.Main</main.class>
         <native.image.name>lamag</native.image.name>
     </properties>
@@ -27,8 +27,8 @@
             <version>${graalvm.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.graalvm.sdk</groupId>
-            <artifactId>graal-sdk</artifactId>
+            <groupId>org.graalvm.polyglot</groupId>
+            <artifactId>polyglot</artifactId>
             <version>${graalvm.version}</version>
         </dependency>
         <dependency>
@@ -191,11 +191,12 @@
                             <imageName>${native.image.name}</imageName>
                             <mainClass>${main.class}</mainClass>
                             <fallback>false</fallback>
+                            <classpathLayout>module-path</classpathLayout>
                             <buildArgs>
                                 <buildArg>--no-fallback</buildArg>
-                                <buildArg>--report-unsupported-elements-at-runtime</buildArg>
+                                <buildArg>-H:+UnlockExperimentalVMOptions</buildArg>
                                 <buildArg>-H:+ReportExceptionStackTraces</buildArg>
-                                <buildArg>--initialize-at-build-time=org.antlr.v4.runtime</buildArg>
+                                <buildArg>--initialize-at-build-time=org.antlr.v4.runtime,pro.fbtw.lamag.LamaLanguageProvider</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>

@@ -39,12 +39,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup GraalVM (Java 17, native-image)
+      - name: Setup GraalVM (Java 25, native-image)
         uses: graalvm/setup-graalvm@v1
         with:
-          java-version: '17'
+          java-version: '25'
           distribution: 'graalvm-community'
-          components: 'native-image'
           cache: 'maven'
 
       - name: Install OS dependencies for Lama
