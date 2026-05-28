@@ -108,6 +108,17 @@ mvn -B test
 ./scripts/clean_temp.sh
 ```
 
+## Разработка в IntelliJ IDEA
+
+Грамматика `src/main/antlr/.../Lama.g4` компилируется плагином `antlr4-maven-plugin` в `target/generated-sources/antlr4`, и `build-helper-maven-plugin` подключает этот каталог как Source Root, чтобы IDEA видела генерированные классы парсера/лексера сразу после Maven Reimport.
+
+В `.idea/runConfigurations/` лежат две шаренные конфигурации:
+
+- **lamag** — запуск `pro.fbtw.lamag.Main` с предзапуском `mvn generate-sources`, поэтому грамматика автоматически пересобирается перед каждым запуском приложения.
+- **lamag tests** — запуск JUnit-тестов с тем же `generate-sources` перед стартом.
+
+После изменения `Lama.g4` обычный «Run» в IDE сначала вызовет ANTLR и подхватит обновлённый парсер без ручных шагов.
+
 ## Вспомогательные скрипты
 
 - [scripts/](scripts) — сборка native-image, копирование фикстур, очистка, docker-окружение для `lamac`. Подробнее — [scripts/README.MD](scripts/README.MD).

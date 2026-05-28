@@ -1,0 +1,19 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="lamag" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="pro.fbtw.lamag.Main" />
+    <module name="lamag" />
+    <option name="PROGRAM_PARAMETERS" value="" />
+    <option name="VM_PARAMETERS" value="-Dpolyglot.engine.WarnInterpreterOnly=false" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+      <option name="RunMavenGoal" enabled="true">
+        <MavenSettings>
+          <option name="myPomFileName" value="pom.xml" />
+          <option name="myGoals" value="generate-sources" />
+          <option name="myWorkingDirPath" value="$PROJECT_DIR$" />
+        </MavenSettings>
+      </option>
+    </method>
+  </configuration>
+</component>
