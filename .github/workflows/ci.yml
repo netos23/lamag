@@ -28,12 +28,11 @@ jobs:
           distribution: 'graalvm-community'
           components: 'native-image'
           cache: 'maven'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install OS dependencies for Lama
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential opam m4 pkg-config gcc-14-multilib
+          sudo apt-get install -y build-essential opam m4 pkg-config gcc-14-multilib xdot
 
       - name: Install Lama via opam
         run: |

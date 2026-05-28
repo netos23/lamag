@@ -112,3 +112,12 @@ mvn -B test
 
 - [scripts/](scripts) — сборка native-image, копирование фикстур, очистка, docker-окружение для `lamac`. Подробнее — [scripts/README.MD](scripts/README.MD).
 - [docker/](docker) — Dockerfile с предустановленным `lamac`. Подробнее — [docker/README.MD](docker/README.MD).
+
+
+
+| Интерпретатор   | Время выполнения (сек) | Score~ |
+|-----------------|------------------------|--------|
+| lamar-verified* | 105.12                 | -      |
+| lamar*          | 114.84                 | +9%    |
+| lamac -s        | 171.67                 | +50%   |
+| lamac -i        | 574.08                 | +234%  |
