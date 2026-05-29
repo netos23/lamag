@@ -1,7 +1,11 @@
 package pro.fbtw.lamag.nodes;
 
 import com.oracle.truffle.api.CallTarget;
-import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
+import com.oracle.truffle.api.nodes.DirectCallNode;
+import com.oracle.truffle.api.nodes.ExplodeLoop;
+import com.oracle.truffle.api.nodes.IndirectCallNode;
 import pro.fbtw.lamag.LamaException;
 import pro.fbtw.lamag.LamaLanguage;
 import pro.fbtw.lamag.runtime.LamaArray;
@@ -20,7 +24,14 @@ public final class LamaNodes {
     }
 
     public interface AssignableNode {
-        void write(VirtualFrame frame, LamaFrame env, Object value);
+        void write(LamaFrame env, Object value);
+    }
+
+    static void writeTo(LamaExpressionNode target, LamaFrame env, Object value) {
+        if (!(target instanceof AssignableNode)) {
+            throw LamaException.error("assignment target is not assignable");
+        }
+        ((AssignableNode) target).write(env, value);
     }
 
     public static final class LiteralNode extends LamaExpressionNode {
@@ -31,7 +42,7 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
+        public Object executeGeneric(LamaFrame env) {
             return value;
         }
     }
@@ -48,17 +59,17 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
+        public Object executeGeneric(LamaFrame env) {
             return env.read(name);
         }
 
         @Override
-        public void write(VirtualFrame frame, LamaFrame env, Object value) {
+        public void write(LamaFrame env, Object value) {
             env.write(name, value);
         }
     }
 
-    public static final class SequenceNode extends LamaExpressionNode {
+    public static final class SequenceNode extends LamaExpressionNode implements AssignableNode {
         @Children private final LamaExpressionNode[] expressions;
 
         public SequenceNode(LamaExpressionNode[] expressions) {
@@ -66,16 +77,24 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
+        public Object executeGeneric(LamaFrame env) {
             Object result = 0L;
             for (LamaExpressionNode expression : expressions) {
-                result = expression.executeGeneric(frame, env);
+                result = expression.executeGeneric(env);
             }
             return result;
         }
+
+        @Override
+        public void write(LamaFrame env, Object value) {
+            for (int i = 0; i < expressions.length - 1; i++) {
+                expressions[i].executeGeneric(env);
+            }
+            writeTo(expressions[expressions.length - 1], env, value);
+        }
     }
 
-    public static final class ScopeNode extends LamaExpressionNode {
+    public static final class ScopeNode extends LamaExpressionNode implements AssignableNode {
         @Children private final LamaDeclarationNode[] declarations;
         @Child private LamaExpressionNode body;
 
@@ -85,12 +104,21 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
+        public Object executeGeneric(LamaFrame env) {
             LamaFrame local = new LamaFrame(env);
             for (LamaDeclarationNode declaration : declarations) {
                 declaration.executeDeclaration(local);
             }
-            return body.executeGeneric(frame, local);
+            return body.executeGeneric(local);
+        }
+
+        @Override
+        public void write(LamaFrame env, Object value) {
+            LamaFrame local = new LamaFrame(env);
+            for (LamaDeclarationNode declaration : declarations) {
+                declaration.executeDeclaration(local);
+            }
+            writeTo(body, local, value);
         }
     }
 
@@ -104,11 +132,11 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
+        public Object executeGeneric(LamaFrame env) {
             for (LamaDeclarationNode declaration : declarations) {
                 declaration.executeDeclaration(env);
             }
-            return body.executeGeneric(frame, env);
+            return body.executeGeneric(env);
         }
     }
 
@@ -124,7 +152,7 @@ public final class LamaNodes {
         @Override
         public void executeDeclaration(LamaFrame env) {
             for (int i = 0; i < names.length; i++) {
-                Object value = initializers[i] == null ? 0L : initializers[i].executeGeneric(null, env);
+                Object value = initializers[i] == null ? 0L : initializers[i].executeGeneric(env);
                 env.define(names[i], value);
             }
         }
@@ -189,12 +217,9 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
-            if (!(target instanceof AssignableNode)) {
-                throw LamaException.error("assignment target is not assignable");
-            }
-            Object value = valueNode.executeGeneric(frame, env);
-            ((AssignableNode) target).write(frame, env, value);
+        public Object executeGeneric(LamaFrame env) {
+            Object value = valueNode.executeGeneric(env);
+            writeTo(target, env, value);
             return value;
         }
     }
@@ -211,9 +236,9 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
-            Object l = left.executeGeneric(frame, env);
-            Object r = right.executeGeneric(frame, env);
+        public Object executeGeneric(LamaFrame env) {
+            Object l = left.executeGeneric(env);
+            Object r = right.executeGeneric(env);
             switch (operator) {
                 case ":":
                     return LamaValues.cons(l, r);
@@ -258,12 +283,12 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
-            return -LamaValues.asLong(valueNode.executeGeneric(frame, env));
+        public Object executeGeneric(LamaFrame env) {
+            return -LamaValues.asLong(valueNode.executeGeneric(env));
         }
     }
 
-    public static final class IfNode extends LamaExpressionNode {
+    public static final class IfNode extends LamaExpressionNode implements AssignableNode {
         @Child private LamaExpressionNode condition;
         @Child private LamaExpressionNode thenNode;
         @Child private LamaExpressionNode elseNode;
@@ -275,11 +300,17 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
-            if (LamaValues.truth(condition.executeGeneric(frame, env)) != 0) {
-                return thenNode.executeGeneric(frame, env);
+        public Object executeGeneric(LamaFrame env) {
+            if (LamaValues.truth(condition.executeGeneric(env)) != 0) {
+                return thenNode.executeGeneric(env);
             }
-            return elseNode.executeGeneric(frame, env);
+            return elseNode.executeGeneric(env);
+        }
+
+        @Override
+        public void write(LamaFrame env, Object value) {
+            LamaExpressionNode branch = LamaValues.truth(condition.executeGeneric(env)) != 0 ? thenNode : elseNode;
+            writeTo(branch, env, value);
         }
     }
 
@@ -293,28 +324,37 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
-            while (LamaValues.truth(condition.executeGeneric(frame, env)) != 0) {
-                body.executeGeneric(frame, env);
+        public Object executeGeneric(LamaFrame env) {
+            while (LamaValues.truth(condition.executeGeneric(env)) != 0) {
+                body.executeGeneric(env);
             }
             return 0L;
         }
     }
 
     public static final class DoWhileNode extends LamaExpressionNode {
+        @Children private final LamaDeclarationNode[] declarations;
         @Child private LamaExpressionNode body;
         @Child private LamaExpressionNode condition;
 
-        public DoWhileNode(LamaExpressionNode body, LamaExpressionNode condition) {
+        public DoWhileNode(LamaDeclarationNode[] declarations, LamaExpressionNode body, LamaExpressionNode condition) {
+            this.declarations = declarations;
             this.body = body;
             this.condition = condition;
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
-            do {
-                body.executeGeneric(frame, env);
-            } while (LamaValues.truth(condition.executeGeneric(frame, env)) != 0);
+        public Object executeGeneric(LamaFrame env) {
+            while (true) {
+                LamaFrame local = new LamaFrame(env);
+                for (LamaDeclarationNode declaration : declarations) {
+                    declaration.executeDeclaration(local);
+                }
+                body.executeGeneric(local);
+                if (LamaValues.truth(condition.executeGeneric(local)) == 0) {
+                    break;
+                }
+            }
             return 0L;
         }
     }
@@ -333,12 +373,12 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
+        public Object executeGeneric(LamaFrame env) {
             LamaFrame loopEnv = new LamaFrame(env);
-            init.executeGeneric(frame, loopEnv);
-            while (LamaValues.truth(condition.executeGeneric(frame, loopEnv)) != 0) {
-                body.executeGeneric(frame, loopEnv);
-                step.executeGeneric(frame, loopEnv);
+            init.executeGeneric(loopEnv);
+            while (LamaValues.truth(condition.executeGeneric(loopEnv)) != 0) {
+                body.executeGeneric(loopEnv);
+                step.executeGeneric(loopEnv);
             }
             return 0L;
         }
@@ -356,12 +396,12 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
-            Object value = valueNode.executeGeneric(frame, env);
+        public Object executeGeneric(LamaFrame env) {
+            Object value = valueNode.executeGeneric(env);
             for (int i = 0; i < patterns.length; i++) {
                 LamaFrame branchEnv = new LamaFrame(env);
                 if (patterns[i].bind(value, branchEnv)) {
-                    return bodies[i].executeGeneric(frame, branchEnv);
+                    return bodies[i].executeGeneric(branchEnv);
                 }
             }
             throw LamaException.error("pattern matching failed: " + LamaValues.print(value));
@@ -376,10 +416,10 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
+        public Object executeGeneric(LamaFrame env) {
             List<Object> values = new ArrayList<>(elements.length);
             for (LamaExpressionNode element : elements) {
-                values.add(element.executeGeneric(frame, env));
+                values.add(element.executeGeneric(env));
             }
             return new LamaArray(values);
         }
@@ -393,10 +433,10 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
+        public Object executeGeneric(LamaFrame env) {
             List<Object> values = new ArrayList<>(elements.length);
             for (LamaExpressionNode element : elements) {
-                values.add(element.executeGeneric(frame, env));
+                values.add(element.executeGeneric(env));
             }
             return LamaValues.list(values);
         }
@@ -412,10 +452,10 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
+        public Object executeGeneric(LamaFrame env) {
             Object[] values = new Object[fields.length];
             for (int i = 0; i < fields.length; i++) {
-                values[i] = fields[i].executeGeneric(frame, env);
+                values[i] = fields[i].executeGeneric(env);
             }
             return new LamaSexp(tag, values);
         }
@@ -424,6 +464,9 @@ public final class LamaNodes {
     public static final class CallNode extends LamaExpressionNode {
         @Child private LamaExpressionNode callee;
         @Children private final LamaExpressionNode[] arguments;
+        @Child private DirectCallNode directCallNode;
+        @Child private IndirectCallNode indirectCallNode;
+        @CompilationFinal private CallTarget cachedTarget;
 
         public CallNode(LamaExpressionNode callee, LamaExpressionNode[] arguments) {
             this.callee = callee;
@@ -431,16 +474,46 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
-            Object callable = callee.executeGeneric(frame, env);
-            if (!(callable instanceof LamaCallable)) {
-                throw LamaException.error("callee did not evaluate to a function: " + LamaValues.print(callable));
-            }
+        @ExplodeLoop
+        public Object executeGeneric(LamaFrame env) {
+            Object callable = callee.executeGeneric(env);
             Object[] values = new Object[arguments.length];
             for (int i = 0; i < arguments.length; i++) {
-                values[i] = arguments[i].executeGeneric(frame, env);
+                values[i] = arguments[i].executeGeneric(env);
             }
-            return ((LamaCallable) callable).call(values);
+            if (callable instanceof LamaFunction) {
+                return dispatchFunction((LamaFunction) callable, values);
+            }
+            if (callable instanceof LamaCallable) {
+                return ((LamaCallable) callable).call(values);
+            }
+            throw LamaException.error("callee did not evaluate to a function: " + LamaValues.print(callable));
+        }
+
+        private Object dispatchFunction(LamaFunction function, Object[] values) {
+            if (function.arity() != values.length) {
+                throw LamaException.error("function " + function.name() + " expects " + function.arity()
+                        + " arguments, got " + values.length);
+            }
+            Object[] frameArguments = new Object[values.length + 1];
+            frameArguments[0] = function;
+            System.arraycopy(values, 0, frameArguments, 1, values.length);
+
+            CallTarget target = function.callTarget();
+            if (cachedTarget == target) {
+                return directCallNode.call(frameArguments);
+            }
+            if (cachedTarget == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                cachedTarget = target;
+                directCallNode = insert(DirectCallNode.create(target));
+                return directCallNode.call(frameArguments);
+            }
+            if (indirectCallNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                indirectCallNode = insert(IndirectCallNode.create());
+            }
+            return indirectCallNode.call(target, frameArguments);
         }
     }
 
@@ -454,13 +527,13 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
-            return LamaValues.element(receiver.executeGeneric(frame, env), index.executeGeneric(frame, env));
+        public Object executeGeneric(LamaFrame env) {
+            return LamaValues.element(receiver.executeGeneric(env), index.executeGeneric(env));
         }
 
         @Override
-        public void write(VirtualFrame frame, LamaFrame env, Object value) {
-            LamaValues.setElement(receiver.executeGeneric(frame, env), index.executeGeneric(frame, env), value);
+        public void write(LamaFrame env, Object value) {
+            LamaValues.setElement(receiver.executeGeneric(env), index.executeGeneric(env), value);
         }
     }
 
@@ -476,7 +549,7 @@ public final class LamaNodes {
         }
 
         @Override
-        public Object executeGeneric(VirtualFrame frame, LamaFrame env) {
+        public Object executeGeneric(LamaFrame env) {
             return new LamaFunction(name, arity, env, callTarget);
         }
     }

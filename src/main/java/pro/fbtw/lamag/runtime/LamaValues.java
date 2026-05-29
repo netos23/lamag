@@ -1,5 +1,6 @@
 package pro.fbtw.lamag.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import pro.fbtw.lamag.LamaException;
 
 import java.util.ArrayList;
@@ -26,7 +27,14 @@ public final class LamaValues {
         return asLong(value) != 0 ? 1 : 0;
     }
 
+    public static boolean isString(Object value) {
+        return value instanceof LamaString || value instanceof String;
+    }
+
     public static String asString(Object value) {
+        if (value instanceof LamaString) {
+            return ((LamaString) value).value();
+        }
         if (value instanceof String) {
             return (String) value;
         }
@@ -41,12 +49,8 @@ public final class LamaValues {
         if (value instanceof LamaSexp) {
             return ((LamaSexp) value).get(index);
         }
-        if (value instanceof String) {
-            String text = (String) value;
-            if (index < 0 || index >= text.length()) {
-                throw LamaException.error("string index out of bounds: " + index);
-            }
-            return (long) text.charAt((int) index);
+        if (value instanceof LamaString) {
+            return ((LamaString) value).get(index);
         }
         throw LamaException.error("aggregate value expected, got " + typeName(value));
     }
@@ -57,7 +61,11 @@ public final class LamaValues {
             ((LamaArray) value).set(index, newValue);
             return;
         }
-        throw LamaException.error("mutable array expected, got " + typeName(value));
+        if (value instanceof LamaString) {
+            ((LamaString) value).set(index, asLong(newValue));
+            return;
+        }
+        throw LamaException.error("mutable array or string expected, got " + typeName(value));
     }
 
     public static long length(Object value) {
@@ -67,8 +75,8 @@ public final class LamaValues {
         if (value instanceof LamaSexp) {
             return ((LamaSexp) value).size();
         }
-        if (value instanceof String) {
-            return ((String) value).length();
+        if (value instanceof LamaString) {
+            return ((LamaString) value).length();
         }
         throw LamaException.error("boxed value expected in length, got " + typeName(value));
     }
@@ -93,8 +101,8 @@ public final class LamaValues {
         if (left instanceof Long) {
             return Long.compare((Long) left, (Long) right);
         }
-        if (left instanceof String) {
-            return ((String) left).compareTo((String) right);
+        if (isString(left)) {
+            return asString(left).compareTo(asString(right));
         }
         if (left instanceof LamaArray) {
             return compareArrays((LamaArray) left, (LamaArray) right);
@@ -109,9 +117,13 @@ public final class LamaValues {
         return compare(left, right) == 0;
     }
 
+    @TruffleBoundary
     public static String print(Object value) {
-        if (value instanceof Long || value instanceof String) {
+        if (value instanceof Long) {
             return String.valueOf(value);
+        }
+        if (isString(value)) {
+            return "\"" + asString(value) + "\"";
         }
         if (value instanceof LamaArray) {
             List<String> parts = new ArrayList<>();
@@ -133,7 +145,7 @@ public final class LamaValues {
             for (Object field : fields) {
                 parts.add(print(field));
             }
-            return fields.length == 0 ? sexp.tag() : sexp.tag() + "(" + String.join(", ", parts) + ")";
+            return fields.length == 0 ? sexp.tag() : sexp.tag() + " (" + String.join(", ", parts) + ")";
         }
         if (value instanceof LamaBuiltinFunction) {
             return ((LamaBuiltinFunction) value).toString();
@@ -144,11 +156,12 @@ public final class LamaValues {
         return Objects.toString(value);
     }
 
+    @TruffleBoundary
     public static String typeName(Object value) {
         if (value instanceof Long) {
             return "int";
         }
-        if (value instanceof String) {
+        if (isString(value)) {
             return "string";
         }
         if (value instanceof LamaArray) {
@@ -176,6 +189,7 @@ public final class LamaValues {
         return hash;
     }
 
+    @TruffleBoundary
     private static long compareArrays(LamaArray left, LamaArray right) {
         int min = Math.min(left.size(), right.size());
         for (int i = 0; i < min; i++) {
@@ -187,6 +201,7 @@ public final class LamaValues {
         return Integer.compare(left.size(), right.size());
     }
 
+    @TruffleBoundary
     private static long compareSexps(LamaSexp left, LamaSexp right) {
         int tagCompare = left.tag().compareTo(right.tag());
         if (tagCompare != 0) {
@@ -199,7 +214,7 @@ public final class LamaValues {
         if (value instanceof Long) {
             return 0;
         }
-        if (value instanceof String) {
+        if (isString(value)) {
             return 1;
         }
         if (value instanceof LamaArray) {

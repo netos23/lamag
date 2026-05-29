@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build the lamag shaded jar (target/lamag-<version>-all.jar) so tests can run
-# under a JVM without producing a native-image binary.
+# Build everything needed to run the Lama interpreter on the JVM without
+# producing a native-image binary: the compiled language module (target/classes)
+# and its runtime dependencies copied to target/modules. scripts/lamag_jvm.sh
+# launches the interpreter from that module-path.
 #
 # Environment overrides:
 #   MVN        - path to the mvn binary (default: mvn)
@@ -19,13 +21,12 @@ if ! command -v "${MVN_BIN}" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> Packaging shaded jar via maven 'package'" >&2
+echo "==> Packaging via maven 'package'" >&2
 "${MVN_BIN}" -B -DskipTests="${SKIP_TESTS}" package
 
-JAR="$(find "${ROOT_DIR}/target" -maxdepth 1 -type f -name 'lamag-*-all.jar' | head -n1)"
-if [[ -z "${JAR}" || ! -f "${JAR}" ]]; then
-  echo "::error::shaded jar (lamag-*-all.jar) was not produced under target/" >&2
+if [[ ! -d "${ROOT_DIR}/target/modules" || ! -d "${ROOT_DIR}/target/classes" ]]; then
+  echo "::error::module-path (target/modules, target/classes) was not produced" >&2
   exit 1
 fi
 
-echo "==> Shaded jar: ${JAR}" >&2
+echo "==> Module-path ready: ${ROOT_DIR}/target/modules + ${ROOT_DIR}/target/classes" >&2

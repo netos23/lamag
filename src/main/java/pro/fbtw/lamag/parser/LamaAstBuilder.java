@@ -8,6 +8,7 @@ import pro.fbtw.lamag.nodes.LamaExpressionNode;
 import pro.fbtw.lamag.nodes.LamaNodes;
 import pro.fbtw.lamag.runtime.LamaPattern;
 import pro.fbtw.lamag.runtime.LamaProgram;
+import pro.fbtw.lamag.runtime.LamaString;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -75,9 +76,26 @@ final class LamaAstBuilder {
     }
 
     private LamaExpressionNode sequence(LamaParser.SequenceContext context) {
+        return sequenceOf(context.expression());
+    }
+
+    private LamaExpressionNode sequenceOf(List<LamaParser.ExpressionContext> contexts) {
         List<LamaExpressionNode> expressions = new ArrayList<>();
-        for (LamaParser.ExpressionContext expression : context.expression()) {
-            expressions.add(expression(expression));
+        for (int i = 0; i < contexts.size(); i++) {
+            LamaParser.ExpressionContext ctx = contexts.get(i);
+            if (ctx.letExpr() != null) {
+                LamaParser.LetExprContext let = ctx.letExpr();
+                List<LamaParser.ExpressionContext> rest = new ArrayList<>();
+                rest.add(let.expression(1));
+                rest.addAll(contexts.subList(i + 1, contexts.size()));
+                LamaExpressionNode body = sequenceOf(rest);
+                expressions.add(new LamaNodes.CaseNode(
+                        expression(let.expression(0)),
+                        new LamaPattern[]{pattern(let.pattern())},
+                        new LamaExpressionNode[]{body}));
+                break;
+            }
+            expressions.add(expression(ctx));
         }
         if (expressions.isEmpty()) {
             return literal(0L);
@@ -200,7 +218,7 @@ final class LamaAstBuilder {
             return literal(Long.parseLong(context.DECIMAL().getText()));
         }
         if (context.STRING() != null) {
-            return literal(unquoteString(context.STRING().getText()));
+            return literal(new LamaString(unquoteString(context.STRING().getText())));
         }
         if (context.CHAR() != null) {
             return literal((long) unquoteChar(context.CHAR().getText()));
@@ -230,7 +248,7 @@ final class LamaAstBuilder {
             return ifExpression(context.ifExpr());
         }
         if (context.whileExpr() != null) {
-            return new LamaNodes.WhileNode(expression(context.whileExpr().expression()), scopeExpression(context.whileExpr().scopeBody()));
+            return new LamaNodes.WhileNode(sequence(context.whileExpr().sequence()), scopeExpression(context.whileExpr().scopeBody()));
         }
         if (context.forExpr() != null) {
             return new LamaNodes.ForNode(
@@ -240,7 +258,8 @@ final class LamaAstBuilder {
                     scopeExpression(context.forExpr().body));
         }
         if (context.doWhileExpr() != null) {
-            return new LamaNodes.DoWhileNode(scopeExpression(context.doWhileExpr().scopeBody()), expression(context.doWhileExpr().expression()));
+            ScopeAst scope = scope(context.doWhileExpr().scopeBody());
+            return new LamaNodes.DoWhileNode(scope.declarations, scope.body, expression(context.doWhileExpr().expression()));
         }
         if (context.caseExpr() != null) {
             return caseExpression(context.caseExpr());

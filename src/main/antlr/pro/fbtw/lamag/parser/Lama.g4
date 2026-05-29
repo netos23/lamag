@@ -148,7 +148,7 @@ elifBranch
     ;
 
 whileExpr
-    : WHILE expression DO scopeBody OD
+    : WHILE sequence DO scopeBody OD
     ;
 
 forExpr

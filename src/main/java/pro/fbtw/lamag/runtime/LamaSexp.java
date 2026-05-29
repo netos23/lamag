@@ -10,7 +10,7 @@ public final class LamaSexp {
 
     public LamaSexp(String tag, Object[] fields) {
         this.tag = tag;
-        this.fields = fields.clone();
+        this.fields = fields;
     }
 
     public String tag() {
@@ -29,7 +29,7 @@ public final class LamaSexp {
     }
 
     public Object[] fields() {
-        return fields.clone();
+        return fields;
     }
 
     @Override

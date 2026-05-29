@@ -62,8 +62,7 @@ public final class LamaContext {
             return 0L;
         });
         defineBuiltin("length", 1, args -> LamaValues.length(args[0]));
-        defineBuiltin("string", 1, args -> LamaValues.print(args[0]));
-        defineBuiltin("stringcat", 1, args -> LamaValues.print(args[0]));
+        defineBuiltin("string", 1, args -> new LamaString(LamaValues.print(args[0])));
         defineBuiltin("makeArray", 1, args -> LamaArray.filled(Math.toIntExact(LamaValues.asLong(args[0])), 0L));
         defineBuiltin("array", -1, args -> new LamaArray(List.of(args)));
         defineBuiltin("fst", 1, args -> LamaValues.element(args[0], 0L));
@@ -94,20 +93,16 @@ public final class LamaContext {
             String text = LamaValues.asString(args[0]);
             int start = Math.toIntExact(LamaValues.asLong(args[1]));
             int length = Math.toIntExact(LamaValues.asLong(args[2]));
-            return text.substring(start, Math.min(text.length(), start + length));
+            return new LamaString(text.substring(start, Math.min(text.length(), start + length)));
         });
         defineBuiltin("makeString", 1, args -> {
             int length = Math.toIntExact(LamaValues.asLong(args[0]));
-            StringBuilder builder = new StringBuilder(length);
-            for (int i = 0; i < length; i++) {
-                builder.append('\0');
-            }
-            return builder.toString();
+            return LamaString.filled(length, '\0');
         });
         defineBuiltin("tagHash", 1, args -> LamaValues.tagHash(LamaValues.asString(args[0])));
         defineBuiltin("kindOf", 1, args -> (long) kindOf(args[0]));
         defineBuiltin("compareTags", 2, args -> compareTags(args[0], args[1]));
-        defineBuiltin("sprintf", -1, args -> format(args));
+        defineBuiltin("sprintf", -1, args -> new LamaString(format(args)));
         defineBuiltin("printf", -1, args -> {
             String result = format(args);
             output.print(result);
@@ -127,6 +122,9 @@ public final class LamaContext {
         if (value instanceof LamaArray) {
             return new LamaArray(((LamaArray) value).values());
         }
+        if (value instanceof LamaString) {
+            return new LamaString(((LamaString) value).value());
+        }
         return value;
     }
 
@@ -134,7 +132,7 @@ public final class LamaContext {
         if (value instanceof Long) {
             return 0;
         }
-        if (value instanceof String) {
+        if (LamaValues.isString(value)) {
             return 1;
         }
         if (value instanceof LamaArray) {
@@ -164,7 +162,13 @@ public final class LamaContext {
         List<Object> values = new ArrayList<>();
         for (int i = 1; i < args.length; i++) {
             Object arg = args[i];
-            values.add(arg instanceof Long ? arg : LamaValues.print(arg));
+            if (arg instanceof Long) {
+                values.add(arg);
+            } else if (LamaValues.isString(arg)) {
+                values.add(LamaValues.asString(arg));
+            } else {
+                values.add(LamaValues.print(arg));
+            }
         }
         return String.format(format, values.toArray());
     }

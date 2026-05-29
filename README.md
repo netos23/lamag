@@ -20,7 +20,7 @@
 - Git (для подмодуля рантайма)
 - *Опционально:* `lamac` (Lama 1.30) — нужен для сравнительных performance-тестов
 
-> **Важно:** при запуске `mvn test` под GraalVM JDK встроенный модуль `org.graalvm.truffle` маскирует наш classpath-зависимый `truffle-api`, и ServiceLoader может не найти `LamaLanguageProvider` (ошибка `Installed languages are: []`). Поэтому для unit-тестов используется обычный JDK, а GraalVM подключается только для нативной сборки.
+> **Оптимизирующий рантайм.** Чтобы Truffle компилировал гостевой код (а не только интерпретировал), на module/class-path должен быть `org.graalvm.truffle:truffle-runtime` — он подключён зависимостью со scope `runtime`. Без него движок печатает `No optimizing Truffle runtime found ...` и опции вроде `engine.TraceCompilation` вообще не существуют. Unit-тесты (`mvn test`) запускаются по class-path (`<useModulePath>false</useModulePath>` в surefire), поэтому язык находится через сгенерированный `META-INF/services` и одинаково работает на обычном JDK и на GraalVM JDK.
 
 Если `native-image` не найден при запуске `./scripts/build_native.sh`, передайте путь к GraalVM через `JAVA_HOME` — скрипт автоматически подцепит `$JAVA_HOME/bin`:
 
@@ -42,10 +42,17 @@ git submodule update --init --recursive
 mvn -B package -DskipTests
 ```
 
-В `target/` появится shaded-jar `lamag-1.0-SNAPSHOT-all.jar`, который можно запускать так:
+В `target/` появятся скомпилированный модуль `target/classes` и его рантайм-зависимости
+в `target/modules` (включая оптимизирующий `truffle-runtime`). Запуск на JVM идёт с
+module-path — Truffle поставляется как Multi-Release JAR, поэтому склейка в один uber-jar
+ломает инициализацию рантайма:
 
 ```bash
-java -jar target/lamag-1.0-SNAPSHOT-all.jar path/to/program.lama
+java --module-path target/modules:target/classes \
+     --enable-native-access=org.graalvm.truffle \
+     -m pro.fbtw.lamag/pro.fbtw.lamag.Main path/to/program.lama
+# или просто:
+./scripts/lamag_jvm.sh path/to/program.lama
 ```
 
 ### Native-image (используется в тестах)
@@ -94,8 +101,15 @@ mvn -B test
 Переменные окружения:
 - `FIXTURE_DIR` — каталог с `*.lama` (по умолчанию `regression/`).
 - `LAMAG_BIN` — путь к native-бинарю (по умолчанию `target/lamag`).
+- `LAMAG_SKIP_TESTS` — список пропускаемых тестов (через пробел). По умолчанию пропускаются неподдерживаемые фичи (как и в эталонной Truffle-реализации): `test092 test094 test095 test096 test098 test105 test111` — пользовательские инфиксные операторы (092/095/098), захват изменяемых локальных переменных по значению (094/096), eta-расширение (105) и точный формат сообщения об ошибке `undefined name` (111). Поставьте `LAMAG_SKIP_TESTS=""`, чтобы прогнать их тоже.
 
 ### 3. Performance (native-image vs lamac)
+
+> `performance/Sort.lama` сортирует список из 10 000 элементов рекурсивным
+> bubble-sort без хвостовой рекурсии, поэтому удерживает живыми все
+> промежуточные списки (~4.7 ГБ). На JVM с G1 (`scripts/lamag_jvm.sh`, `-Xmx8g`)
+> это ~80 с; нативный бинарь использует Serial GC (единственный в native-image
+> CE) и считает дольше (~3–4 мин), но завершается корректно.
 
 ```bash
 ./scripts/make_perf.sh
@@ -115,7 +129,7 @@ mvn -B test
 Альтернатива native-бинарю — гонять те же сьюты через shaded jar и обычный JVM. Полезно, когда `native-image` не установлен или нужно сравнить поведение JIT/AOT.
 
 ```bash
-./scripts/build_jvm.sh         # mvn package -> target/lamag-*-all.jar
+./scripts/build_jvm.sh         # mvn package -> target/classes + target/modules
 ./scripts/make_examples.sh
 ./test/run_io_jvm.sh
 
@@ -123,13 +137,13 @@ mvn -B test
 ./test/run_performance_jvm.sh
 ```
 
-`run_io_jvm.sh` и `run_performance_jvm.sh` — тонкие обёртки, которые подменяют `LAMAG_BIN` на `scripts/lamag_jvm.sh` (запускает `java -jar target/lamag-*-all.jar`) и делегируют в обычные `run_io.sh` / `run_performance.sh`. Все их переменные окружения (`FIXTURE_DIR`, `LAMAC_BIN`, `SKIP_LAMAC` и т.д.) работают как обычно. Дополнительно:
+`run_io_jvm.sh` и `run_performance_jvm.sh` — тонкие обёртки, которые подменяют `LAMAG_BIN` на `scripts/lamag_jvm.sh` (запускает интерпретатор с module-path `java --module-path target/modules:target/classes -m pro.fbtw.lamag/...`) и делегируют в обычные `run_io.sh` / `run_performance.sh`. Все их переменные окружения (`FIXTURE_DIR`, `LAMAC_BIN`, `SKIP_LAMAC` и т.д.) работают как обычно. Дополнительно:
 
-- `LAMAG_JAR` — путь к shaded jar (по умолчанию свежий `target/lamag-*-all.jar`).
+- `LAMAG_MODULES` / `LAMAG_CLASSES` — пути к module-path (по умолчанию `target/modules` и `target/classes`).
 - `JAVA` — путь к `java` (по умолчанию `$JAVA_HOME/bin/java` или из PATH).
-- `JAVA_OPTS` — дополнительные опции JVM.
+- `JAVA_OPTS` — дополнительные опции JVM (например `-Xmx4g` для тяжёлых программ вроде `Sort.lama`).
 
-Под GraalVM JDK обёртка передаёт `-Dtruffle.class.path.append=<jar>`, чтобы встроенный модуль `org.graalvm.truffle` подхватил наш `LamaLanguageProvider`; под обычным JDK это безвредный no-op.
+Оптимизирующий рантайм Truffle подключается зависимостью `org.graalvm.truffle:truffle-runtime` (scope `runtime`); без неё движок откатывается на интерпретатор без JIT.
 
 ### Очистка фикстур
 

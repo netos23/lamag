@@ -20,6 +20,14 @@ public final class LamaFunction implements LamaCallable {
         return name;
     }
 
+    public int arity() {
+        return arity;
+    }
+
+    public CallTarget callTarget() {
+        return callTarget;
+    }
+
     public LamaFrame closure() {
         return closure;
     }

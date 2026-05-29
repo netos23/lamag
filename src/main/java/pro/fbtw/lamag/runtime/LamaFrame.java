@@ -2,12 +2,12 @@ package pro.fbtw.lamag.runtime;
 
 import pro.fbtw.lamag.LamaException;
 
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.Map;
 
 public final class LamaFrame {
     private final LamaFrame parent;
-    private final Map<String, LamaCell> locals = new LinkedHashMap<>();
+    private final Map<String, LamaCell> locals = new HashMap<>();
 
     public LamaFrame(LamaFrame parent) {
         this.parent = parent;
@@ -36,12 +36,11 @@ public final class LamaFrame {
     }
 
     public LamaCell resolve(String name) {
-        LamaCell cell = locals.get(name);
-        if (cell != null) {
-            return cell;
-        }
-        if (parent != null) {
-            return parent.resolve(name);
+        for (LamaFrame frame = this; frame != null; frame = frame.parent) {
+            LamaCell cell = frame.locals.get(name);
+            if (cell != null) {
+                return cell;
+            }
         }
         throw LamaException.error("undefined variable: " + name);
     }

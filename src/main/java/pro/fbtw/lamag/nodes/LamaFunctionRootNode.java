@@ -23,7 +23,10 @@ public final class LamaFunctionRootNode extends RootNode {
 
     @Override
     public Object execute(VirtualFrame frame) {
-        Object[] args = frame.getArguments();
+        return executeWithArguments(frame.getArguments());
+    }
+
+    private Object executeWithArguments(Object[] args) {
         LamaFunction function = (LamaFunction) args[0];
         LamaFrame local = new LamaFrame(function.closure());
         for (int i = 0; i < parameters.length; i++) {
@@ -32,6 +35,6 @@ public final class LamaFunctionRootNode extends RootNode {
                 throw LamaException.error("argument " + (i + 1) + " does not match parameter pattern in " + name);
             }
         }
-        return body.executeGeneric(frame, local);
+        return body.executeGeneric(local);
     }
 }

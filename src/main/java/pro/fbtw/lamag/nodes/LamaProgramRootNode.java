@@ -20,11 +20,16 @@ public final class LamaProgramRootNode extends RootNode {
 
     @Override
     public Object execute(VirtualFrame frame) {
+        return executeWithoutFrame();
+    }
+
+    private Object executeWithoutFrame() {
         LamaContext context = LamaContext.get(this);
         LamaFrame env = context.globalFrame();
         for (LamaDeclarationNode declaration : declarations) {
             declaration.executeDeclaration(env);
         }
-        return body.executeGeneric(frame, env);
+        body.executeGeneric(env);
+        return 0L;
     }
 }
