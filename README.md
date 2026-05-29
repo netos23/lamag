@@ -187,4 +187,5 @@ Workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) разбит на 
 | lamar-verified* | 105.12                 | -      |
 | lamar*          | 114.84                 | +9%    |
 | lamac -s        | 171.67                 | +50%   |
-| lamac -i        | 574.08                 | +234%  |
+| lamag           | 212.46                 | +23%   |
+| lamac -i        | 574.08                 | +58%   |
